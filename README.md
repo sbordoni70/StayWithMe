@@ -8,7 +8,7 @@ session from locking.
 
 ## What it does
 
-When enabled, StayWithMe periodically wakes the input system by calling the Windows
+When enabled, it periodically wakes the input system by calling the Windows
 API `SetThreadExecutionState` with the `ES_DISPLAY_REQUIRED | ES_SYSTEM_REQUIRED` flags
 on a short timer interval. This prevents:
 
