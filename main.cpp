@@ -6,7 +6,8 @@
 
 // [ private data ]
 // misc data
-#define TS_IDLE_TIME                        ((ULONGLONG) (115 * 1000))
+#define TS_IDLE_TIME_MIN                    (2 * 60)
+#define TS_IDLE_TIME_MAX                    (10 * 60)
 // 
 // timer id
 #define TIMERID_PING_LIFE                   1
@@ -37,6 +38,42 @@ static struct {
 
 
 // [ main window logic ]
+// registry - read DWOORD value
+DWORD Registry_ReadValue_DWORD (HKEY hKeyHive, const wchar_t *pwzKey,
+        const wchar_t *pwzValue, DWORD def_value)
+{
+
+    DWORD ret;
+    HKEY hKey;
+    
+    ret = def_value;
+    // open key (read-only)
+    if ((pwzKey != NULL) && (RegOpenKeyEx (hKeyHive,
+            pwzKey, 0, GENERIC_READ, &hKey) == ERROR_SUCCESS))
+    {
+        union {
+            BYTE b[16];
+            DWORD dw;
+            } value;
+        DWORD type, bytes;
+        
+        bytes = sizeof(value);
+        // read DWORD value
+        if ((RegQueryValueEx (hKey, pwzValue, NULL, &type,
+                value.b, &bytes) == ERROR_SUCCESS) &&
+                (bytes == sizeof(value.dw)))
+        {
+            // set read value
+            ret = value.dw;
+        }
+        // close key
+        RegCloseKey (hKey);
+    }
+    // return value
+    return ret;
+}
+
+
 // traybar - startup
 bool TrayBar_Startup (HINSTANCE hInstance)
 {
@@ -159,17 +196,50 @@ bool TrayBar_Update (HWND hWnd, bool bEnabled)
 
 
 // check and trigger life
-bool WndEvent_InjectLife (HWND hWnd)
+bool WndEvent_InjectLife_Ping (void)
 {
-#ifdef _DEBUG
-    hWnd;
-#endif
-
-    if (!dt.bEnabled)
-        return false;
     // generate life pulse
     SetThreadExecutionState (ES_DISPLAY_REQUIRED | ES_SYSTEM_REQUIRED);
     return true;
+}
+
+
+// check and trigger life
+bool WndEvent_InjectLife_Set (HWND hWnd, bool bEnable)
+{
+    bool ret;
+
+    // reset any old timer
+    KillTimer (hWnd, TIMERID_PING_LIFE);
+    // set new event timer
+    if (!bEnable)
+        ret = true;
+    else
+    {
+        UINT secs, value;
+static const wchar_t wzKey[] =
+    L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System";
+static const wchar_t wzValue[] =
+    L"InactivityTimeoutSecs";
+
+        secs = TS_IDLE_TIME_MIN;
+        // can we update it with a new value from sys policies?
+        value = Registry_ReadValue_DWORD (HKEY_LOCAL_MACHINE, wzKey, wzValue,
+                TS_IDLE_TIME_MIN);
+        // should I apply it?
+        if (value > secs)
+            secs = value;
+        // check max limit
+        if (secs > TS_IDLE_TIME_MAX)
+            secs = TS_IDLE_TIME_MAX;
+        // set timer
+        ret = (SetTimer (hWnd, TIMERID_PING_LIFE, 1000 * (secs - 5), NULL) !=
+                0);
+        // call ping now
+        if (ret)
+            WndEvent_InjectLife_Ping ();
+    }
+    return ret;
 }
 
 
@@ -181,8 +251,7 @@ LRESULT WndEvent_CREATE (HWND hWnd)
     // taskbar startup + init/open
     if (!TrayBar_Startup (dt.hInstance) || !TrayBar_Open (hWnd))
         return -1;
-    // set watchdog timer
-    SetTimer (hWnd, TIMERID_PING_LIFE, TS_IDLE_TIME, nullptr);
+    // window created
     return 0;
 }
 
@@ -202,10 +271,14 @@ LRESULT WndEvent_DESTROY (HWND hWnd)
 // process WM_CREATE
 LRESULT WndEvent_TIMER (HWND hWnd, WPARAM wParam)
 {
+#ifdef _DEBUG
+    hWnd;
+#endif
+
     switch (wParam)
     {
         case TIMERID_PING_LIFE:
-            WndEvent_InjectLife (hWnd);
+            WndEvent_InjectLife_Ping ();
             break;
     }
     return 0;
@@ -220,7 +293,9 @@ void WndEvent_Command_Enable (HWND hWnd)
     CheckMenuItem (dt.trayBar.hMenu, TBRCMENU_ENABLE,
             dt.bEnabled ? (MF_BYCOMMAND | MF_CHECKED) : MF_BYCOMMAND);
     // update traybar icon
-    TrayBar_Update (hWnd, dt.bEnabled);   
+    TrayBar_Update (hWnd, dt.bEnabled);
+    // enable 
+    WndEvent_InjectLife_Set (hWnd, dt.bEnabled);
 }
 
 
