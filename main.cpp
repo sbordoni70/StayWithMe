@@ -4,24 +4,29 @@
 #include "resource.h"
 
 
+// useful macros
+#define MAXSTRLEN(x)                ((int) ((sizeof(x) / sizeof((x)[0])) - 1))
+
+
 // [ private data ]
 // misc data
-#define TS_IDLE_TIME_MIN                    (2 * 60)
-#define TS_IDLE_TIME_MAX                    (10 * 60)
+#define TS_IDLE_TIME_MIN            (2 * 60)
+#define TS_IDLE_TIME_MAX            (10 * 60)
 // 
 // timer id
-#define TIMERID_PING_LIFE                   1
-#define WUM_TRAYBARNOTIFY                   (WM_USER + 0)
+#define TIMERID_PING_LIFE           1
+#define WUM_TRAYBARNOTIFY           (WM_USER + 0)
 // right-click menu ID
-#define TBRCMENU_ENABLE                     100
-#define TBRCMENU_EXIT                       IDCANCEL
+#define TBRCMENU_ENABLE             100
+#define TBRCMENU_EXIT               IDCANCEL
 
 
 // window data
+#define APP_NAME                    L"StayWithMe"
 static const wchar_t wzWndClassName[] =
-    L"StayWithMe_Wnd";
+    APP_NAME L"_Wnd";
 static const wchar_t wzWndTitle[] =
-    L"StayWithMe";
+    APP_NAME;
 
 
 static struct {
@@ -36,13 +41,11 @@ static struct {
     } dt;
 
 
-
 // [ main window logic ]
 // registry - read DWOORD value
 DWORD Registry_ReadValue_DWORD (HKEY hKeyHive, const wchar_t *pwzKey,
         const wchar_t *pwzValue, DWORD def_value)
 {
-
     DWORD ret;
     HKEY hKey;
     
@@ -103,7 +106,7 @@ static const wchar_t wzItem2[] =
             mi.wID = TBRCMENU_ENABLE;
             mi.fType = MFT_STRING;
             mi.dwTypeData = (LPWSTR) wzItem0;
-            mi.cch = (sizeof(wzItem0) / sizeof(wzItem0[0])) - 1;
+            mi.cch = MAXSTRLEN(wzItem0);
             InsertMenuItem (dt.trayBar.hMenu, 0, TRUE, &mi);
             // set item[1]
             mi.wID = 0;
@@ -115,7 +118,7 @@ static const wchar_t wzItem2[] =
             mi.wID = TBRCMENU_EXIT;
             mi.fType = MFT_STRING;
             mi.dwTypeData = (LPWSTR) wzItem2;
-            mi.cch = (sizeof(wzItem2) / sizeof(wzItem2[0])) - 1;
+            mi.cch = MAXSTRLEN(wzItem2);
             InsertMenuItem (dt.trayBar.hMenu, 2, TRUE, &mi);
             // done
             return true;
@@ -160,7 +163,8 @@ bool TrayBar_Open (HWND hWnd)
     nidt.uID = id;
     nidt.hIcon = dt.trayBar.hIcon_OFF;
     nidt.uCallbackMessage = WUM_TRAYBARNOTIFY;
-    nidt.uFlags = NIF_ICON | NIF_MESSAGE;
+    nidt.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
+    lstrcpyn (nidt.szTip, wzWndTitle, MAXSTRLEN(nidt.szTip));
     if (Shell_NotifyIcon (NIM_ADD, &nidt))
     {
         // set trayicon behavior
@@ -183,14 +187,30 @@ bool TrayBar_Open (HWND hWnd)
 bool TrayBar_Update (HWND hWnd, bool bEnabled)
 {
     NOTIFYICONDATA nidt;
+    const wchar_t *pwzTip;
 
-    // add/init icon
+    // add/init icon data
     memset (&nidt, 0, sizeof(nidt));
     nidt.cbSize = sizeof(nidt);
     nidt.hWnd = hWnd;
     nidt.uID = dt.trayBar.id;
-    nidt.hIcon = bEnabled ? dt.trayBar.hIcon_ON : dt.trayBar.hIcon_OFF;
-    nidt.uFlags = NIF_ICON;
+    nidt.uFlags = NIF_ICON | NIF_TIP;
+    if (!bEnabled)
+    {
+        nidt.hIcon = dt.trayBar.hIcon_OFF;
+        pwzTip = wzWndTitle;
+    }
+    else
+    {
+static const wchar_t wzTip[] =
+    APP_NAME L" -- ACTIVE";
+
+        nidt.hIcon = dt.trayBar.hIcon_ON;
+        pwzTip = wzTip;
+    }
+    // set tip
+    lstrcpyn (nidt.szTip, pwzTip, MAXSTRLEN(nidt.szTip));
+    // update icon
     return Shell_NotifyIcon (NIM_MODIFY, &nidt);
 }
 

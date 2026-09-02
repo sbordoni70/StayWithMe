@@ -69,6 +69,10 @@ API libraries present on any modern Windows installation.
 
 ## Notes
 
+- **No keyboard or mouse input is tracked.** The application does not hook, monitor,
+  record, or simulate any keyboard or mouse activity. It simply tells the system, via
+  `SetThreadExecutionState`, that the display and session must stay awake — so your
+  typing and clicking remain completely private and untouched.
 - StayWithMe requires the process to keep running; closing it via **Exit** restores
   normal system idle behavior.
 - The project intentionally keeps no persistent state — a fresh start begins with the
