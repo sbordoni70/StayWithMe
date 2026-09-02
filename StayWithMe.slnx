@@ -1,0 +1,7 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="StayWithMe.vcxproj" Id="4bbfb676-02e8-4444-98c9-b740f7271646" />
+</Solution>

@@ -1,0 +1,8 @@
+[
+  {
+    "directory": "C:\\_sources\\misc\\_msvc\\StayWithMe",
+    "command": "cl.exe /D _DEBUG /D _WINDOWS /D _UNICODE /D UNICODE /fp:precise /Gd /EHsc /W4 /std:c++20 /Zc:wchar_t --target=x86_64-pc-windows-msvc /winsdkdir\"C:\\Program Files (x86)\\Windows Kits\\10\" /winsdkversion10.0.26100.0 /vctoolsversion14.51.36231 /vctoolsdir\"C:\\Program Files\\Microsoft Visual Studio\\18\\Professional\\VC\\Tools\\MSVC\\14.51.36231\" C:\\_sources\\misc\\_msvc\\StayWithMe\\main.cpp",
+    "file": "C:\\_sources\\misc\\_msvc\\StayWithMe\\main.cpp"
+  }
+]
+
