@@ -1,5 +1,6 @@
 // StayWithMe - main module
 #include <windows.h>
+#include <powrprof.h>
 #include <shellapi.h>
 #include "resource.h"
 
@@ -10,8 +11,9 @@
 
 // [ private data ]
 // misc data
-#define TS_IDLE_TIME_MIN            (2 * 60)
+#define TS_IDLE_TIME_MIN            10
 #define TS_IDLE_TIME_MAX            (10 * 60)
+#define TS_IDLE_TIME_DELTA          3
 // 
 // timer id
 #define TIMERID_PING_LIFE           1
@@ -27,6 +29,7 @@ static const wchar_t wzWndClassName[] =
     APP_NAME L"_Wnd";
 static const wchar_t wzWndTitle[] =
     APP_NAME;
+static UINT last_idle_tout = 0;
 
 
 static struct {
@@ -41,7 +44,7 @@ static struct {
     } dt;
 
 
-// [ main window logic ]
+// [ private methods ]
 // registry - read DWOORD value
 DWORD Registry_ReadValue_DWORD (HKEY hKeyHive, const wchar_t *pwzKey,
         const wchar_t *pwzValue, DWORD def_value)
@@ -73,6 +76,51 @@ DWORD Registry_ReadValue_DWORD (HKEY hKeyHive, const wchar_t *pwzKey,
         RegCloseKey (hKey);
     }
     // return value
+    return ret;
+}
+
+
+// [ main window logic ]
+// get system policies timeout value
+UINT Policies_GetTimeout (void)
+{
+static const wchar_t wzKey[] =
+    L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System";
+static const wchar_t wzValue[] =
+    L"InactivityTimeoutSecs";
+
+    // can we update it with a new value from sys policies?
+    return Registry_ReadValue_DWORD (HKEY_LOCAL_MACHINE, wzKey, wzValue, 0);
+}
+
+
+// power settings - get minimal timeout value
+UINT PowerSettings_GetTimeout (void)
+{
+    POWER_POLICY pp;
+    GLOBAL_POWER_POLICY glb_pp;
+    UINT ret;
+
+    // get current power policies data
+    if (!GetCurrentPowerPolicies (&glb_pp, &pp))
+        ret = 0;
+    else
+    {
+        ret = (UINT) -1;
+        // check video timeouts
+        if ((pp.user.VideoTimeoutAc > 0) && (ret > pp.user.VideoTimeoutAc))
+            ret = pp.user.VideoTimeoutAc;
+        if ((pp.user.VideoTimeoutDc > 0) && (ret > pp.user.VideoTimeoutDc))
+            ret = pp.user.VideoTimeoutDc;
+        // check idle timeouts
+        if ((pp.user.IdleTimeoutAc > 0) && (ret > pp.user.IdleTimeoutAc))
+            ret = pp.user.IdleTimeoutAc;
+        if ((pp.user.IdleTimeoutDc > 0) && (ret > pp.user.IdleTimeoutDc))
+            ret = pp.user.IdleTimeoutDc;
+        // fix the not-found value
+        if (ret == (UINT) -1)
+            ret = 0;
+    }    
     return ret;
 }
 
@@ -186,6 +234,7 @@ bool TrayBar_Open (HWND hWnd)
 // taskbar - update
 bool TrayBar_Update (HWND hWnd, bool bEnabled)
 {
+    wchar_t wzBuffer[128];
     NOTIFYICONDATA nidt;
     const wchar_t *pwzTip;
 
@@ -197,16 +246,17 @@ bool TrayBar_Update (HWND hWnd, bool bEnabled)
     nidt.uFlags = NIF_ICON | NIF_TIP;
     if (!bEnabled)
     {
-        nidt.hIcon = dt.trayBar.hIcon_OFF;
         pwzTip = wzWndTitle;
+        nidt.hIcon = dt.trayBar.hIcon_OFF;
     }
     else
     {
 static const wchar_t wzTip[] =
-    APP_NAME L" -- ACTIVE";
+    APP_NAME L" -- ACTIVE (eval. idle time %us)";
 
+        wsprintfW (wzBuffer, wzTip, last_idle_tout);
+        pwzTip = wzBuffer;
         nidt.hIcon = dt.trayBar.hIcon_ON;
-        pwzTip = wzTip;
     }
     // set tip
     lstrcpyn (nidt.szTip, pwzTip, MAXSTRLEN(nidt.szTip));
@@ -233,28 +283,31 @@ bool WndEvent_InjectLife_Set (HWND hWnd, bool bEnable)
     KillTimer (hWnd, TIMERID_PING_LIFE);
     // set new event timer
     if (!bEnable)
+    {
+        last_idle_tout = 0;
         ret = true;
+    }
     else
     {
         UINT secs, value;
-static const wchar_t wzKey[] =
-    L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System";
-static const wchar_t wzValue[] =
-    L"InactivityTimeoutSecs";
 
-        secs = TS_IDLE_TIME_MIN;
-        // can we update it with a new value from sys policies?
-        value = Registry_ReadValue_DWORD (HKEY_LOCAL_MACHINE, wzKey, wzValue,
-                TS_IDLE_TIME_MIN);
-        // should I apply it?
-        if (value > secs)
+        secs = TS_IDLE_TIME_MAX;
+        // get and apply power settings timeout
+        value = PowerSettings_GetTimeout ();
+        if ((value > 0) && (value < secs))
             secs = value;
-        // check max limit
-        if (secs > TS_IDLE_TIME_MAX)
-            secs = TS_IDLE_TIME_MAX;
+        // get and apply policies settings timeout
+        value = Policies_GetTimeout ();
+        if ((value > 0) && (value < secs))
+            secs = value;
+        // update last idle timeout
+        last_idle_tout = secs;
+        // set min value
+        if (secs < TS_IDLE_TIME_MIN)
+            secs = TS_IDLE_TIME_MIN;
         // set timer
-        ret = (SetTimer (hWnd, TIMERID_PING_LIFE, 1000 * (secs - 5), NULL) !=
-                0);
+        ret = (SetTimer (hWnd, TIMERID_PING_LIFE,
+                1000 * (secs - TS_IDLE_TIME_DELTA), NULL) != 0);
         // call ping now
         if (ret)
             WndEvent_InjectLife_Ping ();
@@ -312,10 +365,10 @@ void WndEvent_Command_Enable (HWND hWnd)
     // update popup menu
     CheckMenuItem (dt.trayBar.hMenu, TBRCMENU_ENABLE,
             dt.bEnabled ? (MF_BYCOMMAND | MF_CHECKED) : MF_BYCOMMAND);
-    // update traybar icon
-    TrayBar_Update (hWnd, dt.bEnabled);
     // enable 
     WndEvent_InjectLife_Set (hWnd, dt.bEnabled);
+    // update traybar icon
+    TrayBar_Update (hWnd, dt.bEnabled);
 }
 
 
@@ -422,7 +475,8 @@ static const wchar_t wzMutex[] =
         wcex.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
         wcex.lpszClassName = wzWndClassName;
 
-        if (!RegisterClassExW (&wcex)) {
+        if (!RegisterClassExW (&wcex))
+        {
             MessageBoxW (nullptr, L"Failed to register window class.",
                     wzWndTitle, MB_ICONERROR);
             return -1;
@@ -457,6 +511,7 @@ static const wchar_t wzMutex[] =
     }
 
     // free mutex
-    CloseHandle (hMutex);
+    if (hMutex != NULL)
+        CloseHandle (hMutex);
     return 0;
 }
