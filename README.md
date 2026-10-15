@@ -8,9 +8,8 @@ session from locking.
 
 ## What it does
 
-When enabled, it evaluates the idle time, to set a bit shorter timer to wake the input
-system by calling the Windows API `SetThreadExecutionState` with the
-`ES_DISPLAY_REQUIRED | ES_SYSTEM_REQUIRED` flags on a short timer interval.
+When enabled, it evaluates the idle time to wake the input system by calling the
+Windows API `SetThreadExecutionState` on a bit shorter timer interval.
 
 This prevents:
 - the display power-save / screen blank timeout, and
