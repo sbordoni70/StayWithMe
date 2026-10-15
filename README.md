@@ -34,7 +34,7 @@ The tray icon changes appearance to reflect the current state:
 ## Building
 
 The project is a native C++ (C++20) Windows application built with the Microsoft
-Visual C++ (MSVC) toolchain. [Visual Studio 2022](https://visualstudio.microsoft.com/)
+Visual C++ (MSVC) toolchain. [Visual Studio 2026](https://visualstudio.microsoft.com/)
 is required to compile it.
 
 - Open `StayWithMe.slnx` in Visual Studio and build the `StayWithMe` target,
@@ -49,7 +49,7 @@ API libraries present on any modern Windows installation.
 
 - Windows 10 / 11 (any recent Windows release supporting the Windows Shell
   notification area and `SetThreadExecutionState`).
-- [Visual Studio 2022](https://visualstudio.microsoft.com/) with the C++ build tools
+- [Visual Studio 2026](https://visualstudio.microsoft.com/) with the C++ build tools
   (MSVC toolchain) to compile the project.
 - No third-party runtime dependencies.
 - No installation and no administrative privileges are required to **use** the
